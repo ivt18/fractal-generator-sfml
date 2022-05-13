@@ -9,21 +9,34 @@
 #define DEBUG_MSG(str) do { } while ( false )
 #endif
 
+// Drawing mandelbrot
+#define ITERATIONS 1000
+#define STARTING_FRACTAL_MIN_X -2.5
+#define STARTING_FRACTAL_MAX_X 1.5
+#define STARTING_FRACTAL_MIN_Y -1.5
+#define STARTING_FRACTAL_MAX_Y 1.5
+
 // Screen sizes
 #define SCREEN_X 800
 #define SCREEN_Y 600
-const int min_x = 0;                                        // The minimum 'x' coordinate of a visible pixel
-const int min_y = 1;                                        // The minimum 'y' coordinate of a visible pixel
-const int max_x = SCREEN_X - 1;                             // The maximum 'x' coordinate of a visible pixel
-const int max_y = SCREEN_Y;                                 // The maximum 'y' coordinate of a visible pixel
+const int screen_min_x = 0;                                        // The minimum 'x' coordinate of a visible pixel
+const int screen_min_y = 1;                                        // The minimum 'y' coordinate of a visible pixel
+const int screen_max_x = SCREEN_X - 1;                             // The maximum 'x' coordinate of a visible pixel
+const int screen_max_y = SCREEN_Y + 1;                                 // The maximum 'y' coordinate of a visible pixel
 
-// Drawing mandelbrot
-#define ITERATIONS 1000
+const double fractal_min_x = STARTING_FRACTAL_MIN_X;
+const double fractal_max_x = STARTING_FRACTAL_MAX_X;
+const double fractal_min_y = STARTING_FRACTAL_MIN_Y;
+const double fractal_max_y = STARTING_FRACTAL_MAX_Y;
+
+// For the rendering of the Mandelbrot set
+double x_pixel = (double)(fractal_max_x - fractal_min_x) / (double)(SCREEN_X - 1);
+double y_pixel = (double)(fractal_max_y - fractal_min_y) / (double)(SCREEN_Y - 1);
 
 sf::VertexArray screen(sf::Points, SCREEN_X * SCREEN_Y);
 
 int get_screen_pos(const int& x, const int& y) {
-    return x + max_x * (y - 1);
+    return x + screen_max_x * (y - 1);
 }
 
 /**
@@ -31,11 +44,11 @@ int get_screen_pos(const int& x, const int& y) {
  * Only done at the start.
  */
 static void init_pixels() {
-    for (int x = min_x; x <= max_x; ++x) {                                      // For every 'x' coordinate
-        for (int y = min_y; y <= max_y; ++y) {                                  // For every 'y' coordinate 
+    for (int x = screen_min_x; x <= screen_max_x; ++x) {                                      // For every 'x' coordinate
+        for (int y = screen_min_y; y <= screen_max_y; ++y) {                                  // For every 'y' coordinate 
             int screen_pos = get_screen_pos(x, y);
             screen[screen_pos].position = sf::Vector2f(x, y);          // We set the corresponding pixel's position
-            screen[screen_pos].color = sf::Color::Black;               // And we make it black
+            // screen[screen_pos].color = sf::Color::Black;               // And we make it black
         }
     }
 
@@ -43,23 +56,24 @@ static void init_pixels() {
 }
 
 static sf::Color calculate_point(const int& x, const int& y) {
-    int z_x, z_y;                                               // Create a complex number that corresponds to the screen's coordinates
-    z_x = x;
-    z_y = y;
+    double z_x, z_y, c_x, c_y;              // Create a complex number that corresponds to the screen's coordinates
+    z_x = fractal_min_x + x * x_pixel;
+    z_y = fractal_max_y - y * y_pixel;
+
+    c_x = z_x;                              // Create the constant that we add with each iteration
+    c_y = z_y;
     int i;
     for (i = 0; i < ITERATIONS; ++i) {
         // We now have to square 'z'
-        z_x = z_x * z_x - z_y * z_y;
-        z_y = 2 * z_x * z_y;
-
         // And add the original parameters
-        z_x += x;
-        z_y += y;
+        double tmp = z_x;           // Store temporarily old value of 'z_x'. Used for computing 'z_y'
+        z_x = z_x * z_x - z_y * z_y + c_x;
+        z_y = 2 * tmp * z_y + c_y;
 
         // We check if the length of the vector/complex number is greater than 2
         // Note that we square the length, in order to improve performance (square root is a slow computation)
         if (z_x * z_x + z_y * z_y > 4) {
-            break;
+            break;          // If it diverges, we then end the for-loop
         }
     }
 
@@ -70,16 +84,73 @@ static sf::Color calculate_point(const int& x, const int& y) {
 }
 
 /**
- * Render the Mandelbrot set for a fixed number of iterations.
- * @param num_iterations : the number of iterations for which we are rendering the set
+ * Render the bottom left quartile of the Mandelbrot set.
  */
-static void render_mandelbrot() {
-    for (int x = min_x; x < max_x; ++x) {
-        for (int y = min_y; y < max_y; ++y) {
+void render_bottom_left() {
+    for (int x = screen_min_x; x < screen_max_x / 2; ++x) {
+        for (int y = screen_max_y / 2; y < screen_max_y; ++y) {
             sf::Color current_pixel_color = calculate_point(x, y);
             screen[get_screen_pos(x, y)].color = current_pixel_color;
         }
     }
+}
+
+/**
+ * Render the bottom right quartile of the Mandelbrot set.
+ */
+void render_bottom_right() {
+    for (int x = screen_max_x / 2; x < screen_max_x; ++x) {
+        for (int y = screen_max_y / 2; y < screen_max_y; ++y) {
+            sf::Color current_pixel_color = calculate_point(x, y);
+            screen[get_screen_pos(x, y)].color = current_pixel_color;
+        }
+    }
+}
+
+/**
+ * Render the top left quartile of the Mandelbrot set.
+ */
+void render_top_left() {
+    for (int x = screen_min_x; x < screen_max_x / 2; ++x) {
+        for (int y = screen_min_y; y < screen_max_y / 2; ++y) {
+            sf::Color current_pixel_color = calculate_point(x, y);
+            screen[get_screen_pos(x, y)].color = current_pixel_color;
+        }
+    }
+}
+
+/**
+ * Render the top right quartile of the Mandelbrot set.
+ */
+void render_top_right() {
+    for (int x = screen_max_x / 2; x < screen_max_x; ++x) {
+        for (int y = screen_min_y; y < screen_max_y / 2; ++y) {
+            sf::Color current_pixel_color = calculate_point(x, y);
+            screen[get_screen_pos(x, y)].color = current_pixel_color;
+        }
+    }
+}
+
+/**
+ * Render the whole Mandelbrot set.
+ */
+static void render_mandelbrot() {
+    // for (int x = screen_min_x; x < screen_max_x; ++x) {
+    //     for (int y = screen_min_y; y < screen_max_y; ++y) {
+    //         sf::Color current_pixel_color = calculate_point(x, y);
+    //         screen[get_screen_pos(x, y)].color = current_pixel_color;
+    //     }
+    // }
+
+    sf::Thread top_left(&render_top_left);
+    sf::Thread top_right(&render_top_right);
+    sf::Thread bottom_left(&render_bottom_left);
+    sf::Thread bottom_right(&render_bottom_right);
+
+    top_left.launch();
+    top_right.launch();
+    bottom_left.launch();
+    bottom_right.launch();
 
     DEBUG_MSG("Mandelbrot set rendered.");
 }
