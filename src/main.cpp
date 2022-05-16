@@ -1,8 +1,9 @@
 #include <iostream>
+#include <complex>
 #include <SFML/Graphics.hpp>
 
 // Debugging
-#define DEBUG 1
+// #define DEBUG 1
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
 #else
@@ -33,7 +34,76 @@ const double fractal_max_y = STARTING_FRACTAL_MAX_Y;
 double x_pixel = (double)(fractal_max_x - fractal_min_x) / (double)(SCREEN_X - 1);
 double y_pixel = (double)(fractal_max_y - fractal_min_y) / (double)(SCREEN_Y - 1);
 
+// For panning around the Mandelbrot set
+#define SENSITIVITY 2
+double move_x = 0;          // We start with no movement on any of the axis
+double move_y = 0;
+
+// For complex numbers
+const std::complex<double> i(0., 1.);       // The 'i' complex number
+
 sf::VertexArray screen(sf::Points, SCREEN_X * SCREEN_Y);
+
+class Mandelbrot : public sf::Drawable, public sf::Transformable {
+    private:
+        sf::VertexArray screen;
+        int max_iterations;
+        int screen_x;
+        int screen_y;
+        std::complex<double> min;
+        std::complex<double> max;
+
+        // Return the index in the VertexArray of a pixel
+        int get_screen_pos(int x, int y) {
+            return x + this -> screen_x * (y - 1);
+        }
+
+    protected:
+        int get_convergence(std::complex<double> c) {
+            int iteration;
+            std::complex<double> z(0., 0.);
+            // While we are below the limit of iterations and don't diverge 
+            while (iteration < this -> max_iterations && std::real(z) * std::real(z) + std::imag(z) + std::imag(z) < 4) {
+                z = z * z + c;
+                iteration++;
+            }
+
+            return iteration;   // Return the iteration on which we diverge 
+        }
+
+    public:
+        // Mandelbrot set constructor
+        Mandelbrot(int max_iterations, int screen_x, int screen_y) {
+            this -> max_iterations = max_iterations;
+            this -> screen.resize(screen_x * screen_y);
+            this -> screen_x = screen_x;
+            this -> screen_y = screen_y;
+        }
+
+        // Initial setup
+        void init() {
+            min = std::complex<double>(STARTING_FRACTAL_MIN_X, STARTING_FRACTAL_MIN_Y);
+            max = std::complex<double>(STARTING_FRACTAL_MAX_X, STARTING_FRACTAL_MAX_Y);
+            for (int x = 0 ; x <= this -> screen_x; ++x) {
+                for (int y = 0; y <= this -> screen_y; ++y) {
+                    // We create the 'c' complex number necessary for the formula
+                    double c_r = this -> min.real() + x * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
+                    double c_i = this -> min.imag() + y * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
+                    std::complex<double> c(c_r, c_i);
+                    int convergence_iteration = get_convergence(c);
+                    int index = get_screen_pos(x, y);
+
+                    if (convergence_iteration = this -> max_iterations) {
+                        this -> screen[index].color = sf::Color::White;
+                    } else {
+                        this -> screen[index].color = sf::Color::Black;
+                    }
+
+                    this -> screen[index].position = sf::Vector2f(x, y);
+                }
+            }
+        }
+};
 
 int get_screen_pos(const int& x, const int& y) {
     return x + screen_max_x * (y - 1);
@@ -57,8 +127,8 @@ static void init_pixels() {
 
 static sf::Color calculate_point(const int& x, const int& y) {
     double z_x, z_y, c_x, c_y;              // Create a complex number that corresponds to the screen's coordinates
-    z_x = fractal_min_x + x * x_pixel;
-    z_y = fractal_max_y - y * y_pixel;
+    z_x = fractal_min_x + (x + move_x * SENSITIVITY) * x_pixel;
+    z_y = fractal_max_y - (y + move_y * SENSITIVITY) * y_pixel;
 
     c_x = z_x;                              // Create the constant that we add with each iteration
     c_y = z_y;
@@ -131,6 +201,12 @@ void render_top_right() {
     }
 }
 
+// For multithreading
+sf::Thread top_left(&render_top_left);
+sf::Thread top_right(&render_top_right);
+sf::Thread bottom_left(&render_bottom_left);
+sf::Thread bottom_right(&render_bottom_right);
+
 /**
  * Render the whole Mandelbrot set.
  */
@@ -142,11 +218,6 @@ static void render_mandelbrot() {
     //     }
     // }
 
-    sf::Thread top_left(&render_top_left);
-    sf::Thread top_right(&render_top_right);
-    sf::Thread bottom_left(&render_bottom_left);
-    sf::Thread bottom_right(&render_bottom_right);
-
     top_left.launch();
     top_right.launch();
     bottom_left.launch();
@@ -154,6 +225,18 @@ static void render_mandelbrot() {
 
     DEBUG_MSG("Mandelbrot set rendered.");
 }
+
+void read_screen_dragging(sf::RenderWindow* window) {
+    if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {              // If we are pressing the left mouse button
+        sf::Vector2i initial_position = sf::Mouse::getPosition(*window);           // Get the mouse's position relative ot the window
+        // sf::sleep(sf::milliseconds(50));            // Sleep the thread for a bit
+        sf::Vector2i new_position = sf::Mouse::getPosition(*window);
+        move_x -= new_position.x - initial_position.x;
+        move_y -= new_position.y - initial_position.y;
+        render_mandelbrot();
+    }
+}
+
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(SCREEN_X, SCREEN_Y), "Fractal Generator");
@@ -164,7 +247,12 @@ int main() {
     
     while(window.isOpen()) {
         sf::Event event;
+
         while (window.pollEvent(event)) {
+            if (event.type == sf::Event::MouseMoved) {   // If we are moving the mouse
+                read_screen_dragging(&window);
+            }
+
             if (event.type == sf::Event::Closed)
                 window.close();
         }
