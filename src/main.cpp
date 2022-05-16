@@ -66,7 +66,7 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
             int iteration;
             std::complex<double> z(0., 0.);
             // While we are below the limit of iterations and don't diverge 
-            while (iteration < (this -> max_iterations) && std::abs(z) < 2) {
+            while (iteration < (this -> max_iterations) && z.real() * z.real() + z.imag() * z.imag() < 4) {
                 z = z * z + c;
                 iteration++;
             }
