@@ -24,6 +24,8 @@
 #define SCREEN_Y 600
 #define MANDELBROT_X 1000
 #define MANDELBROT_Y 800
+const sf::Color background_color = sf::Color::Cyan;
+const sf::Color foreground_color = sf::Color(255, 154, 0);
 
 const int screen_min_x = 0;                                        // The minimum 'x' coordinate of a visible pixel
 const int screen_min_y = 1;                                        // The minimum 'y' coordinate of a visible pixel
@@ -49,10 +51,85 @@ const std::complex<double> i(0., 1.);       // The 'i' complex number
 
 // Class that maps the colors of the Mandelbrot set to the iteration 
 class ColorMap {
+    private:
+        /**
+         * Convert HSB color to RGB.
+         */
+        sf::Color hsv_to_rgb(double smooth_color, double saturation, double value) {
+            int H = 0.95 + 20 * smooth_color;
+            double S = saturation;
+            double V = value;
+
+            // If the hue is outside the necessary limit of a single circumference
+            while (H < 0) {
+                H += 360;
+            }
+            while (H > 360) {
+                H -= 360;
+            }
+
+            double C = V * S;
+            double X = C * (1 - std::abs((H / 60) % 2 - 1));
+            double m = V - C;
+
+            double R_, G_, B_;
+
+            if ((H >= 0 && H < 60)) {
+                R_ = C;
+                G_ = X;
+                B_ = 0;
+            }
+
+            if (H >= 60 && H < 120) {
+                R_ = X;
+                G_ = C;
+                B_ = 0;
+            }
+
+            if (H >= 120 && H < 180) {
+                R_ = 0;
+                G_ = C;
+                B_ = X;
+            }
+
+            if (H >= 180 && H < 240) {
+                R_ = 0;
+                G_ = X;
+                B_ = C;
+            }
+
+            if (H >= 240 && H < 300) {
+                R_ = X;
+                G_ = 0;
+                B_ = C;
+            }
+
+            if (H >= 300 && H < 360) {
+                R_ = C;
+                G_ = 0;
+                B_ = X;
+            }
+
+            uint8_t R = (int)((R_ + m) * 255);
+            uint8_t G = (int)((G_ + m) * 255);
+            uint8_t B = (int)((B_ + m) * 255);
+
+            return sf::Color(R, G, B);
+        }
+
     public:
-        sf::Color get_color(unsigned int n) {
-            // double smooth_color = ;
-            // TODO: get smooth colors working
+        sf::Color get_color_expensive(unsigned int n, std::complex<double> z) {
+            double smooth_color = n + 1 - std::log(std::log(std::abs(z))) / std::log(2);
+            return hsv_to_rgb(smooth_color, 0.8, 1.0);
+        }
+
+        sf::Color get_color_cheap(sf::Color background_color_, sf::Color foreground_color_, unsigned int convergence_iteration, unsigned int max_iterations) {
+            double p = (double)convergence_iteration / (double)max_iterations;
+            double r = p * (foreground_color_.r - background_color_.r) + background_color_.r;
+            double g = p * (foreground_color_.g - background_color_.g) + background_color_.g;
+            double b = p * (foreground_color_.b - background_color_.b) + background_color_.b;
+
+            return sf::Color(r, g, b);
         }
 };
 
@@ -63,6 +140,7 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         int max_iterations;
         int screen_x;
         int screen_y;
+        ColorMap cmap;
 
         // Return the index in the VertexArray of a pixel
         int get_screen_pos(int x, int y) {
@@ -70,11 +148,10 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         }
 
     protected:
-        int get_convergence(std::complex<double> c) {
+        int get_convergence(const std::complex<double>& c, std::complex<double>& z) {
             int iteration = 0;
-            std::complex<double> z(0., 0.);
             // While we are below the limit of iterations and don't diverge 
-            while (iteration < (this -> max_iterations) && std::abs(z) < 2) {
+            while (iteration < (this -> max_iterations) && z.real() * z.real() + z.imag() * z.imag() < 4) {
                 z = (z * z) + c;
                 iteration++;
             }
@@ -84,12 +161,13 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
 
     public:
         // Mandelbrot set constructor
-        Mandelbrot(int max_iter, int s_x, int s_y) {
-            this -> max_iterations = max_iter;
+        Mandelbrot(int max_iterations_, int screen_x_, int screen_y_, ColorMap cmap_) {
+            this -> max_iterations = max_iterations_;
             this -> screen.setPrimitiveType(sf::Points);        // Set the primitive type of the screen to pixels
-            this -> screen.resize(s_x * s_y);         // Resize the screen to our desired screen dimensions
-            this -> screen_x = s_x;                             // Update the private variables for the Mandelbrot's screen width and height
-            this -> screen_y = s_y;
+            this -> screen.resize(screen_x_ * screen_y_);         // Resize the screen to our desired screen dimensions
+            this -> screen_x = screen_x_;                             // Update the private variables for the Mandelbrot's screen width and height
+            this -> screen_y = screen_y_;
+            this -> cmap = cmap_;
         }
 
         // Initial setup
@@ -103,16 +181,15 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
                         double c_r = min.real() + x * (max.real() - min.real()) / (this -> screen_x - 1);
                         double c_i = min.imag() + y * (max.imag() - min.imag()) / (this -> screen_y - 1);
                         std::complex<double> c(c_r, c_i);
-                        int convergence_iteration = get_convergence(c);
+
+                        std::complex<double> z_n(0., 0.);
+                        unsigned int convergence_iteration = get_convergence(c, z_n);
                         int index = get_screen_pos(x, y);
 
                         this -> screen[index].position = sf::Vector2f(x, y);
 
-                        if (convergence_iteration == this -> max_iterations) {
-                            this -> screen[index].color = sf::Color::White;
-                        } else {
-                            this -> screen[index].color = sf::Color::Black;
-                        }
+                        // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
+                        this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
                     }
                 }
             #else
@@ -122,16 +199,14 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
                         // We create the 'c' complex number necessary for the formula
                         double c_i = min.imag() + y * (max.imag() - min.imag()) / (this -> screen_y - 1);
                         std::complex<double> c(c_r, c_i);
-                        int convergence_iteration = get_convergence(c);
+                        std::complex<double> z_n(0., 0.);
+                        unsigned int convergence_iteration = get_convergence(c, z_n);
                         int index = get_screen_pos(x, y);
 
                         this -> screen[index].position = sf::Vector2f(x, y);
 
-                        if (convergence_iteration == this -> max_iterations) {
-                            this -> screen[index].color = sf::Color::White;
-                        } else {
-                            this -> screen[index].color = sf::Color::Black;
-                        }
+                        // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
+                        this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
                     }
                 }
             #endif
@@ -148,42 +223,11 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         }
 };
 
-int get_screen_pos(const int& x, const int& y) {
-    return x + screen_max_x * (y - 1);
-}
-
-static sf::Color calculate_point(const int& x, const int& y) {
-    double z_x, z_y, c_x, c_y;              // Create a complex number that corresponds to the screen's coordinates
-    z_x = fractal_min_x + (x + move_x * SENSITIVITY) * x_pixel;
-    z_y = fractal_max_y - (y + move_y * SENSITIVITY) * y_pixel;
-
-    c_x = z_x;                              // Create the constant that we add with each iteration
-    c_y = z_y;
-    int i;
-    for (i = 0; i < ITERATIONS; ++i) {
-        // We now have to square 'z'
-        // And add the original parameters
-        double tmp = z_x;           // Store temporarily old value of 'z_x'. Used for computing 'z_y'
-        z_x = z_x * z_x - z_y * z_y + c_x;
-        z_y = 2 * tmp * z_y + c_y;
-
-        // We check if the length of the vector/complex number is greater than 2
-        // Note that we square the length, in order to improve performance (square root is a slow computation)
-        if (z_x * z_x + z_y * z_y > 4) {
-            break;          // If it diverges, we then end the for-loop
-        }
-    }
-
-    if (i == ITERATIONS) {
-        return sf::Color::White;
-    }
-    return sf::Color::Black;
-}
-
 int main() {
     sf::RenderWindow window(sf::VideoMode(SCREEN_X, SCREEN_Y), "Fractal Generator");
 
-    Mandelbrot mandelbrot(ITERATIONS, MANDELBROT_X, MANDELBROT_Y);
+    ColorMap cmap;
+    Mandelbrot mandelbrot(ITERATIONS, MANDELBROT_X, MANDELBROT_Y, cmap);
 
     std::complex<double> max(STARTING_FRACTAL_MAX_X, STARTING_FRACTAL_MAX_Y);
     std::complex<double> min(STARTING_FRACTAL_MIN_X, STARTING_FRACTAL_MIN_Y);
