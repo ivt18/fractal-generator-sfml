@@ -2,6 +2,7 @@
 #include <complex>
 #include <SFML/Graphics.hpp>
 #include <omp.h>            // For multithreading
+#include <math.h>           // For colors
 
 // Debugging
 #define DEBUG 1
@@ -19,9 +20,9 @@
 #define STARTING_FRACTAL_MAX_Y 1.5
 
 // Screen sizes
-#define SCREEN_X 800
+#define SCREEN_X 1000
 #define SCREEN_Y 600
-#define MANDELBROT_X 800
+#define MANDELBROT_X 1000
 #define MANDELBROT_Y 800
 
 const int screen_min_x = 0;                                        // The minimum 'x' coordinate of a visible pixel
@@ -46,7 +47,16 @@ double move_y = 0;
 // For complex numbers
 const std::complex<double> i(0., 1.);       // The 'i' complex number
 
+// Class that maps the colors of the Mandelbrot set to the iteration 
+class ColorMap {
+    public:
+        sf::Color get_color(unsigned int n) {
+            // double smooth_color = ;
+            // TODO: get smooth colors working
+        }
+};
 
+// Class that actually renders the Mandelbrot set
 class Mandelbrot : public sf::Drawable, public sf::Transformable {
     private:
         sf::VertexArray screen;
