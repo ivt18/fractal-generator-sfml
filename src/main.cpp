@@ -5,7 +5,7 @@
 #include <math.h>           // For colors
 
 // Debugging
-#define DEBUG 1
+// #define DEBUG 1
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str << std::endl; } while( false )
 #else
@@ -42,7 +42,7 @@ double x_pixel = (double)(fractal_max_x - fractal_min_x) / (double)(SCREEN_X - 1
 double y_pixel = (double)(fractal_max_y - fractal_min_y) / (double)(SCREEN_Y - 1);
 
 // For panning around the Mandelbrot set
-#define SENSITIVITY 2
+#define SENSITIVITY 50
 double move_x = 0;          // We start with no movement on any of the axis
 double move_y = 0;
 
@@ -118,11 +118,17 @@ class ColorMap {
         }
 
     public:
+        /**
+         * Get a color for a certain iteration using logarithmic interpolation; too expensive
+         */
         sf::Color get_color_expensive(unsigned int n, std::complex<double> z) {
             double smooth_color = n + 1 - std::log(std::log(std::abs(z))) / std::log(2);
             return hsv_to_rgb(smooth_color, 0.8, 1.0);
         }
 
+        /**
+         * Get a color for a certain iteration using simple linear interpolation; way cheaper, but kind of ugly
+         */
         sf::Color get_color_cheap(sf::Color background_color_, sf::Color foreground_color_, unsigned int convergence_iteration, unsigned int max_iterations) {
             double p = (double)convergence_iteration / (double)max_iterations;
             double r = p * (foreground_color_.r - background_color_.r) + background_color_.r;
@@ -140,6 +146,10 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         int max_iterations;
         int screen_x;
         int screen_y;
+        int move_x;
+        int move_y;
+        std::complex<double> max;
+        std::complex<double> min;
         ColorMap cmap;
 
         // Return the index in the VertexArray of a pixel
@@ -161,25 +171,29 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
 
     public:
         // Mandelbrot set constructor
-        Mandelbrot(int max_iterations_, int screen_x_, int screen_y_, ColorMap cmap_) {
+        Mandelbrot(const int& max_iterations_, const int& screen_x_, const int& screen_y_, const ColorMap& cmap_, const std::complex<double>& max_, const std::complex<double>& min_) {
             this -> max_iterations = max_iterations_;
             this -> screen.setPrimitiveType(sf::Points);        // Set the primitive type of the screen to pixels
             this -> screen.resize(screen_x_ * screen_y_);         // Resize the screen to our desired screen dimensions
             this -> screen_x = screen_x_;                             // Update the private variables for the Mandelbrot's screen width and height
             this -> screen_y = screen_y_;
             this -> cmap = cmap_;
+            this -> move_x = 0;
+            this -> move_y = 0;
+            this -> max = max_;
+            this -> min = min_;
         }
 
         // Initial setup
-        void update(std::complex<double> max, std::complex<double> min) {
+        void update() {
             DEBUG_MSG("Updating Mandelbrot set.");
             #ifdef _OPENMP
                 #pragma omp parallel for collapse(2) schedule(dynamic)
                 for (int x = 0 ; x < this -> screen_x; ++x) {
                     for (int y = 0; y < this -> screen_y; ++y) {
                         // We create the 'c' complex number necessary for the formula
-                        double c_r = min.real() + x * (max.real() - min.real()) / (this -> screen_x - 1);
-                        double c_i = min.imag() + y * (max.imag() - min.imag()) / (this -> screen_y - 1);
+                        double c_r = this -> min.real() + (x + this -> move_x) * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
+                        double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
                         std::complex<double> c(c_r, c_i);
 
                         std::complex<double> z_n(0., 0.);
@@ -194,10 +208,10 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
                 }
             #else
                 for (int x = 0 ; x < this -> screen_x; ++x) {
-                    double c_r = min.real() + x * (max.real() - min.real()) / (this -> screen_x - 1);
+                    double c_r = this -> min.real() + (x + this -> move_x) * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
                     for (int y = 0; y < this -> screen_y; ++y) {
                         // We create the 'c' complex number necessary for the formula
-                        double c_i = min.imag() + y * (max.imag() - min.imag()) / (this -> screen_y - 1);
+                        double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
                         std::complex<double> c(c_r, c_i);
                         std::complex<double> z_n(0., 0.);
                         unsigned int convergence_iteration = get_convergence(c, z_n);
@@ -214,6 +228,12 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
             DEBUG_MSG("Initial setup completed.");
         }
 
+        void move_fractal(const int& pixel_x, const int& pixel_y) {
+            this -> move_x -= pixel_x;
+            this -> move_y -= pixel_y;
+            this -> update();
+        }
+
     private:
         // Since we are inheriting from another class, we must define the virtual voids
         virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const {
@@ -226,11 +246,11 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
 int main() {
     sf::RenderWindow window(sf::VideoMode(SCREEN_X, SCREEN_Y), "Fractal Generator");
 
-    ColorMap cmap;
-    Mandelbrot mandelbrot(ITERATIONS, MANDELBROT_X, MANDELBROT_Y, cmap);
-
     std::complex<double> max(STARTING_FRACTAL_MAX_X, STARTING_FRACTAL_MAX_Y);
     std::complex<double> min(STARTING_FRACTAL_MIN_X, STARTING_FRACTAL_MIN_Y);
+
+    ColorMap cmap;
+    Mandelbrot mandelbrot(ITERATIONS, MANDELBROT_X, MANDELBROT_Y, cmap, max, min);
 
     bool init = true;
     
@@ -240,12 +260,35 @@ int main() {
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed)
                 window.close();
+
+            if (event.type == sf::Event::KeyPressed) {
+                switch (event.key.code) {
+                    case sf::Keyboard::Left:        // If the left arrow key is pressed
+                        mandelbrot.move_fractal(-1 * SENSITIVITY, 0);
+                        break;
+
+                    case sf::Keyboard::Right:       // If the right arrow key is pressed
+                        mandelbrot.move_fractal(SENSITIVITY, 0);
+                        break;
+
+                    case sf::Keyboard::Up:          // If the up arrow key is pressed
+                        mandelbrot.move_fractal(0, -1 * SENSITIVITY);
+                        break;
+
+                    case sf::Keyboard::Down:        // If the down arrow key is pressed
+                        mandelbrot.move_fractal(0, SENSITIVITY);
+                        break;
+
+                    default:
+                        break;
+                }
+            }
         }
 
         if (init) {
             window.clear(sf::Color::Black);
             window.display();
-            mandelbrot.update(max, min);
+            mandelbrot.update();
             init = false;
         }
 
