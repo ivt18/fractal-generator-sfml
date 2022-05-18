@@ -42,7 +42,7 @@ double x_pixel = (double)(fractal_max_x - fractal_min_x) / (double)(SCREEN_X - 1
 double y_pixel = (double)(fractal_max_y - fractal_min_y) / (double)(SCREEN_Y - 1);
 
 // For panning around the Mandelbrot set
-#define SENSITIVITY 50
+#define SENSITIVITY 10
 double move_x = 0;          // We start with no movement on any of the axis
 double move_y = 0;
 
@@ -228,9 +228,28 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
             DEBUG_MSG("Initial setup completed.");
         }
 
+        /**
+         * Move the fractal by a few pixels.
+         * @param pixel_x : pixels to move in 'x' axis
+         * @param pixel_y : pixels to move in 'y' axis
+         */
         void move_fractal(const int& pixel_x, const int& pixel_y) {
             this -> move_x -= pixel_x;
             this -> move_y -= pixel_y;
+            this -> update();
+        }
+
+        /**
+         * Zoom in by removing a few pixels from each side, while still maintaining the aspect ratio.
+         * @param zoom_pixels : pixels to zoom in by
+         */
+        void zoom_fractal(const int& zoom_pixels) {
+            const std::complex<double> old_max = max;
+            const std::complex<double> old_min = min;
+            this -> max = std::complex<double>(old_max.real() - zoom_pixels * (old_max.real()) - old_min.real() / (this -> screen_x - 1),
+                    old_max.imag() - zoom_pixels * ((double)this -> screen_y / (double)this -> screen_x) * (old_max.imag() - old_min.imag()) / (this -> screen_y - 1));     // Zoom in from top right corner
+            this -> min = std::complex<double>(old_min.real() + zoom_pixels * (old_max.real() - old_min.real()) / (this -> screen_x - 1),
+                    old_min.imag() + zoom_pixels * ((double)this -> screen_y / (double)this -> screen_x) * (old_max.imag() - old_min.imag()) / (this -> screen_y - 1));     // Zoom in from bottom left corner
             this -> update();
         }
 
@@ -277,6 +296,16 @@ int main() {
 
                     case sf::Keyboard::Down:        // If the down arrow key is pressed
                         mandelbrot.move_fractal(0, SENSITIVITY);
+                        break;
+
+                    case sf::Keyboard::Comma:
+                        DEBUG_MSG("Zooming in.");
+                        mandelbrot.zoom_fractal(SENSITIVITY / 2);
+                        break;
+
+                    case sf::Keyboard::Period:
+                        DEBUG_MSG("Zooming out.");
+                        mandelbrot.zoom_fractal(-1 * SENSITIVITY / 2);
                         break;
 
                     default:
