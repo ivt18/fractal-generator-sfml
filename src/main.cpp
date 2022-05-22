@@ -25,7 +25,8 @@
 #define MANDELBROT_X 1000
 #define MANDELBROT_Y 800
 const sf::Color background_color = sf::Color::Cyan;
-const sf::Color foreground_color = sf::Color(255, 154, 0);
+const sf::Color foreground_color = sf::Color::Black;
+// const sf::Color foreground_color = sf::Color(255, 154, 0);
 
 const int screen_min_x = 0;                                        // The minimum 'x' coordinate of a visible pixel
 const int screen_min_y = 1;                                        // The minimum 'y' coordinate of a visible pixel
@@ -246,7 +247,7 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         void zoom_fractal(const int& zoom_pixels) {
             const std::complex<double> old_max = max;
             const std::complex<double> old_min = min;
-            this -> max = std::complex<double>(old_max.real() - zoom_pixels * (old_max.real()) - old_min.real() / (this -> screen_x - 1),
+            this -> max = std::complex<double>(old_max.real() - zoom_pixels * (old_max.real() - old_min.real()) / (this -> screen_x - 1),
                     old_max.imag() - zoom_pixels * ((double)this -> screen_y / (double)this -> screen_x) * (old_max.imag() - old_min.imag()) / (this -> screen_y - 1));     // Zoom in from top right corner
             this -> min = std::complex<double>(old_min.real() + zoom_pixels * (old_max.real() - old_min.real()) / (this -> screen_x - 1),
                     old_min.imag() + zoom_pixels * ((double)this -> screen_y / (double)this -> screen_x) * (old_max.imag() - old_min.imag()) / (this -> screen_y - 1));     // Zoom in from bottom left corner
