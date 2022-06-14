@@ -1,8 +1,8 @@
 #include <iostream>
-#include <complex>
-#include <SFML/Graphics.hpp>
 #include <omp.h>            // For multithreading
-#include <math.h>           // For colors
+
+// for the ColorMap class
+#include "color_map.hpp"
 
 // Debugging
 // #define DEBUG 1
@@ -50,101 +50,11 @@ double move_y = 0;
 // For complex numbers
 const std::complex<double> i(0., 1.);       // The 'i' complex number
 
-// Class that maps the colors of the Mandelbrot set to the iteration 
-class ColorMap {
-    private:
-        /**
-         * Convert HSB color to RGB.
-         */
-        sf::Color hsv_to_rgb(double smooth_color, double saturation, double value) {
-            int H = 0.95 + 20 * smooth_color;
-            double S = saturation;
-            double V = value;
-
-            // If the hue is outside the necessary limit of a single circumference
-            while (H < 0) {
-                H += 360;
-            }
-            while (H > 360) {
-                H -= 360;
-            }
-
-            double C = V * S;
-            double X = C * (1 - std::abs((H / 60) % 2 - 1));
-            double m = V - C;
-
-            double R_, G_, B_;
-
-            if ((H >= 0 && H < 60)) {
-                R_ = C;
-                G_ = X;
-                B_ = 0;
-            }
-
-            if (H >= 60 && H < 120) {
-                R_ = X;
-                G_ = C;
-                B_ = 0;
-            }
-
-            if (H >= 120 && H < 180) {
-                R_ = 0;
-                G_ = C;
-                B_ = X;
-            }
-
-            if (H >= 180 && H < 240) {
-                R_ = 0;
-                G_ = X;
-                B_ = C;
-            }
-
-            if (H >= 240 && H < 300) {
-                R_ = X;
-                G_ = 0;
-                B_ = C;
-            }
-
-            if (H >= 300 && H < 360) {
-                R_ = C;
-                G_ = 0;
-                B_ = X;
-            }
-
-            uint8_t R = (int)((R_ + m) * 255);
-            uint8_t G = (int)((G_ + m) * 255);
-            uint8_t B = (int)((B_ + m) * 255);
-
-            return sf::Color(R, G, B);
-        }
-
-    public:
-        /**
-         * Get a color for a certain iteration using logarithmic interpolation; too expensive
-         */
-        sf::Color get_color_expensive(unsigned int n, std::complex<double> z) {
-            double smooth_color = n + 1 - std::log(std::log(std::abs(z))) / std::log(2);
-            return hsv_to_rgb(smooth_color, 0.8, 1.0);
-        }
-
-        /**
-         * Get a color for a certain iteration using simple linear interpolation; way cheaper, but kind of ugly
-         */
-        sf::Color get_color_cheap(sf::Color background_color_, sf::Color foreground_color_, unsigned int convergence_iteration, unsigned int max_iterations) {
-            double p = (double)convergence_iteration / (double)max_iterations;
-            double r = p * (foreground_color_.r - background_color_.r) + background_color_.r;
-            double g = p * (foreground_color_.g - background_color_.g) + background_color_.g;
-            double b = p * (foreground_color_.b - background_color_.b) + background_color_.b;
-
-            return sf::Color(r, g, b);
-        }
-};
-
 // Class that actually renders the Mandelbrot set
 class Mandelbrot : public sf::Drawable, public sf::Transformable {
     private:
         sf::VertexArray screen;
-        int max_iterations;
+        unsigned int max_iterations;
         int screen_x;
         int screen_y;
         int move_x;
@@ -188,42 +98,45 @@ class Mandelbrot : public sf::Drawable, public sf::Transformable {
         // Initial setup
         void update() {
             DEBUG_MSG("Updating Mandelbrot set.");
-            #ifdef _OPENMP
-                #pragma omp parallel for collapse(2) schedule(dynamic)
-                for (int x = 0 ; x < this -> screen_x; ++x) {
-                    for (int y = 0; y < this -> screen_y; ++y) {
-                        // We create the 'c' complex number necessary for the formula
+            #ifdef COLOR_MAP_H
+                #ifdef _OPENMP
+                    #pragma omp parallel for collapse(2) schedule(dynamic)
+                    for (int x = 0 ; x < this -> screen_x; ++x) {
+                        for (int y = 0; y < this -> screen_y; ++y) {
+                            // We create the 'c' complex number necessary for the formula
+                            double c_r = this -> min.real() + (x + this -> move_x) * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
+                            double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
+                            std::complex<double> c(c_r, c_i);
+
+                            std::complex<double> z_n(0., 0.);
+                            unsigned int convergence_iteration = get_convergence(c, z_n);
+                            int index = get_screen_pos(x, y);
+
+                            this -> screen[index].position = sf::Vector2f(x, y);
+
+                            // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
+                            this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
+                        }
+                    }
+                #else
+                    for (int x = 0 ; x < this -> screen_x; ++x) {
                         double c_r = this -> min.real() + (x + this -> move_x) * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
-                        double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
-                        std::complex<double> c(c_r, c_i);
+                        for (int y = 0; y < this -> screen_y; ++y) {
+                            // We create the 'c' complex number necessary for the formula
+                            double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
+                            std::complex<double> c(c_r, c_i);
+                            std::complex<double> z_n(0., 0.);
+                            unsigned int convergence_iteration = get_convergence(c, z_n);
+                            int index = get_screen_pos(x, y);
 
-                        std::complex<double> z_n(0., 0.);
-                        unsigned int convergence_iteration = get_convergence(c, z_n);
-                        int index = get_screen_pos(x, y);
+                            this -> screen[index].position = sf::Vector2f(x, y);
 
-                        this -> screen[index].position = sf::Vector2f(x, y);
-
-                        // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
-                        this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
+                            // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
+                            // TODO: openmp cannot use functions like this that are from other classes. therefore, just define the mandelbrot class and put this function in there
+                            this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
+                        }
                     }
-                }
-            #else
-                for (int x = 0 ; x < this -> screen_x; ++x) {
-                    double c_r = this -> min.real() + (x + this -> move_x) * (this -> max.real() - this -> min.real()) / (this -> screen_x - 1);
-                    for (int y = 0; y < this -> screen_y; ++y) {
-                        // We create the 'c' complex number necessary for the formula
-                        double c_i = this -> min.imag() + (y + this -> move_y) * (this -> max.imag() - this -> min.imag()) / (this -> screen_y - 1);
-                        std::complex<double> c(c_r, c_i);
-                        std::complex<double> z_n(0., 0.);
-                        unsigned int convergence_iteration = get_convergence(c, z_n);
-                        int index = get_screen_pos(x, y);
-
-                        this -> screen[index].position = sf::Vector2f(x, y);
-
-                        // this -> screen[index].color = (convergence_iteration == this -> max_iterations) ? this -> cmap.get_color_expensive(convergence_iteration, z_n) : sf::Color::Black;
-                        this -> screen[index].color = cmap.get_color_cheap(background_color, foreground_color, convergence_iteration, this -> max_iterations);
-                    }
-                }
+                #endif
             #endif
 
             DEBUG_MSG("Initial setup completed.");
