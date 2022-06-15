@@ -12,7 +12,7 @@ To run this project, you need:
 
 In case you are on Arch Linux, these can be installed from the command line as follows:
 ```
-sudo pacman -S sfml && sudo pacman -S openmp
+sudo pacman -S sfml openmp
 ```
 
 ## Running the project 
