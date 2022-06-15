@@ -1,5 +1,17 @@
 #include "color_map.hpp"
 
+ColorMap::ColorMap() {}
+
+/**
+ * Class constructor.
+ * @param background_color_ the background color of the fractal 
+ * @param foreground_color_ the foreground color of the fractal 
+ */
+ColorMap::ColorMap(const sf::Color& background_color_, const sf::Color& foreground_color_) {
+    background_color = background_color_;
+    foreground_color = foreground_color_;
+}
+
 /**
  * Convert hSB color to RGB 
  * @param smooth_color 
@@ -85,11 +97,11 @@ sf::Color ColorMap::get_color_expensive(unsigned int n, std::complex<double> z) 
  * @param convergence_iteration 
  * @param max_iterations 
  */
-sf::Color ColorMap::get_color_cheap(sf::Color background_color_, sf::Color foreground_color_, unsigned int convergence_iteration, unsigned int max_iterations) {
+sf::Color ColorMap::get_color_cheap(unsigned int convergence_iteration, unsigned int max_iterations) {
     double p = (double)convergence_iteration / (double)max_iterations;
-    double r = p * (foreground_color_.r - background_color_.r) + background_color_.r;
-    double g = p * (foreground_color_.g - background_color_.g) + background_color_.g;
-    double b = p * (foreground_color_.b - background_color_.b) + background_color_.b;
+    double r = p * (foreground_color.r - background_color.r) + background_color.r;
+    double g = p * (foreground_color.g - background_color.g) + background_color.g;
+    double b = p * (foreground_color.b - background_color.b) + background_color.b;
 
     return sf::Color(r, g, b);
 }
