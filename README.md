@@ -21,9 +21,10 @@ First, clone the GitHub repository:
 git clone https://github.com/IliyanVT18/Fractal-Generator 
 ```
 
-Then, `cd` into the directory:
+Then, `cd` into the directory and make the `bin` folder:
 ```
 cd Fractal-Generator
+mkdir bin
 ```
 
 Finally, compile it: 
