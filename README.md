@@ -18,7 +18,7 @@ sudo pacman -S sfml openmp
 ## Running the project 
 First, clone the GitHub repository:
 ```
-git clone https://github.com/IliyanVT18/Fractal-Generator 
+git clone https://github.com/ivt18/fractal-generator-sfml
 ```
 
 Then, `cd` into the directory and make the `bin` folder:
@@ -38,6 +38,6 @@ And run it:
 ```
 
 ## Controlling the fractal 
-As you can (hopefully) see, there is now a Mandelbrot fractal on your screen. It can be controlled as follows:
+As you can see, there is now a Mandelbrot fractal on your screen. It can be controlled as follows:
 - Left / Right / Up / Down arrows for movement 
 - Comma / Period for zooming in and out.
